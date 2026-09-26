@@ -1,11 +1,18 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "newsletter-reader",
+  "name": "Newsletters",
   "outputfilename": "Newsletters",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "Arghya Chakrabarty",
+    "productName": "Newsletters",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2026 Arghya Chakrabarty",
+    "comments": "A focused reader for the newsletters in your Gmail labels."
+  },
   "author": {
     "name": "Arghya.Chakrabarty",
     "email": "arghya2801@gmail.com"

@@ -8,7 +8,7 @@ export function ChooseSaveDir():Promise<string>;
 
 export function DeleteHighlight(arg1:number):Promise<void>;
 
-export function ExportHighlights():Promise<main.Export>;
+export function ExportHighlights():Promise<main.HighlightsExport>;
 
 export function GetConfig():Promise<main.Config>;
 

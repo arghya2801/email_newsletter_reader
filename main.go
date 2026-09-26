@@ -9,18 +9,23 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	dir := dataDir()
+	dir, portable := dataDir()
 	store, err := openStore(filepath.Join(dir, "cache.db"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	app := NewApp(dir, store)
+	app := NewApp(dir, portable, store)
+	win := &windows.Options{}
+	if portable { // keep WebView2's cache beside the exe too
+		win.WebviewUserDataPath = filepath.Join(dir, "webview")
+	}
 
 	// /img?u=<remote url> serves newsletter images from the disk cache.
 	imgs := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +52,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: imgs},
 		BackgroundColour: &options.RGBA{R: 230, G: 233, B: 237, A: 1},
 		OnStartup:        app.startup,
+		Windows:          win,
 		Bind:             []interface{}{app},
 	})
 	if err != nil {

@@ -27,22 +27,35 @@ type Config struct {
 	Scale       int      `json:"scale"`   // interface size in percent
 }
 
-func dataDir() string {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		d = "."
+// dataDir picks where settings and the cache live: $NLR_DATA if set; a "data"
+// folder beside the exe when a file named "portable" sits next to it; else %APPDATA%.
+func dataDir() (dir string, portable bool) {
+	if exe, err := os.Executable(); err == nil {
+		if _, err := os.Stat(filepath.Join(filepath.Dir(exe), "portable")); err == nil {
+			dir, portable = filepath.Join(filepath.Dir(exe), "data"), true
+		}
 	}
-	d = filepath.Join(d, "newsletter-reader")
+	if !portable {
+		d, err := os.UserConfigDir()
+		if err != nil {
+			d = "."
+		}
+		dir = filepath.Join(d, "newsletter-reader")
+	}
 	if env := os.Getenv("NLR_DATA"); env != "" { // separate profile, e.g. for testing
-		d = env
+		dir = env
 	}
-	os.MkdirAll(filepath.Join(d, "img"), 0o755)
-	return d
+	os.MkdirAll(filepath.Join(dir, "img"), 0o755)
+	return dir, portable
 }
 
-func loadConfig(dir string) Config {
+func loadConfig(dir string, portable bool) Config {
 	home, _ := os.UserHomeDir()
-	c := Config{Host: "imap.gmail.com:993", SaveDir: filepath.Join(home, "Documents", "Newsletters"), SyncMinutes: 15, Density: "comfortable", Scale: 100}
+	save := filepath.Join(home, "Documents", "Newsletters")
+	if portable {
+		save = "Saved" // relative to the data folder, so it survives a new drive letter
+	}
+	c := Config{Host: "imap.gmail.com:993", SaveDir: save, SyncMinutes: 15, Density: "comfortable", Scale: 100}
 	if b, err := os.ReadFile(filepath.Join(dir, "config.json")); err == nil {
 		json.Unmarshal(b, &c)
 	}

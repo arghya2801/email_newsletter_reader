@@ -44,20 +44,6 @@ export namespace main {
 	        this.unread = source["unread"];
 	    }
 	}
-	export class Export {
-	    path: string;
-	    markdown: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Export(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.path = source["path"];
-	        this.markdown = source["markdown"];
-	    }
-	}
 	export class Highlight {
 	    id: number;
 	    messageId: number;
@@ -86,6 +72,20 @@ export namespace main {
 	        this.subject = source["subject"];
 	        this.fromName = source["fromName"];
 	        this.date = source["date"];
+	    }
+	}
+	export class HighlightsExport {
+	    path: string;
+	    markdown: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HighlightsExport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.markdown = source["markdown"];
 	    }
 	}
 	export class Issue {

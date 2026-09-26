@@ -20,8 +20,8 @@ type App struct {
 	syncing sync.Mutex
 }
 
-func NewApp(dir string, store *Store) *App {
-	return &App{dir: dir, store: store, cfg: loadConfig(dir)}
+func NewApp(dir string, portable bool, store *Store) *App {
+	return &App{dir: dir, store: store, cfg: loadConfig(dir, portable)}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -42,6 +42,15 @@ func (a *App) config() Config {
 }
 
 func (a *App) GetConfig() Config { return a.config() }
+
+// saveDir resolves a relative save folder (portable mode) against the data folder.
+func (a *App) saveDir() string {
+	d := a.config().SaveDir
+	if !filepath.IsAbs(d) {
+		d = filepath.Join(a.dir, d)
+	}
+	return d
+}
 
 func (a *App) SaveConfig(c Config) error {
 	if c.Host == "" {
@@ -69,7 +78,7 @@ func (a *App) SetAppearance(density string, scale int) error {
 func (a *App) ServerLabels() ([]string, error) { return serverLabels(a.config()) }
 
 func (a *App) ChooseSaveDir() (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Folder for saved newsletters", DefaultDirectory: a.config().SaveDir})
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title: "Folder for saved newsletters", DefaultDirectory: a.saveDir()})
 }
 
 type SyncStatus struct {
@@ -141,7 +150,7 @@ func (a *App) SaveEmail(id int64, format string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return saveEmail(a.dir, a.config().SaveDir, m, format)
+	return saveEmail(a.dir, a.saveDir(), m, format)
 }
 
 func (a *App) AddHighlight(h Highlight) (Highlight, error) { return a.store.AddHighlight(h) }
@@ -149,22 +158,22 @@ func (a *App) SetNote(id int64, note string) error         { return a.store.SetN
 func (a *App) DeleteHighlight(id int64) error              { return a.store.DeleteHighlight(id) }
 func (a *App) Highlights() ([]Highlight, error)            { return a.store.Highlights(0) }
 
-type Export struct {
+type HighlightsExport struct {
 	Path     string `json:"path"`
 	Markdown string `json:"markdown"`
 }
 
 // ExportHighlights writes highlights.md to the save folder and returns it for the clipboard.
-func (a *App) ExportHighlights() (Export, error) {
+func (a *App) ExportHighlights() (HighlightsExport, error) {
 	hs, err := a.store.Highlights(0)
 	if err != nil {
-		return Export{}, err
+		return HighlightsExport{}, err
 	}
 	md := highlightsMarkdown(hs)
-	dir := a.config().SaveDir
+	dir := a.saveDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Export{}, err
+		return HighlightsExport{}, err
 	}
 	p := filepath.Join(dir, "highlights.md")
-	return Export{p, md}, os.WriteFile(p, []byte(md), 0o644)
+	return HighlightsExport{p, md}, os.WriteFile(p, []byte(md), 0o644)
 }
