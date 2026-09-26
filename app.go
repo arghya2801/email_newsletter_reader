@@ -132,9 +132,9 @@ func (a *App) SaveEmail(id int64, format string) (string, error) {
 }
 
 func (a *App) AddHighlight(h Highlight) (Highlight, error) { return a.store.AddHighlight(h) }
-func (a *App) SetNote(id int64, note string) error        { return a.store.SetNote(id, note) }
-func (a *App) DeleteHighlight(id int64) error             { return a.store.DeleteHighlight(id) }
-func (a *App) Highlights() ([]Highlight, error)           { return a.store.Highlights(0) }
+func (a *App) SetNote(id int64, note string) error         { return a.store.SetNote(id, note) }
+func (a *App) DeleteHighlight(id int64) error              { return a.store.DeleteHighlight(id) }
+func (a *App) Highlights() ([]Highlight, error)            { return a.store.Highlights(0) }
 
 type Export struct {
 	Path     string `json:"path"`

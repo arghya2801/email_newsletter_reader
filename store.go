@@ -26,6 +26,9 @@ func dataDir() string {
 		d = "."
 	}
 	d = filepath.Join(d, "newsletter-reader")
+	if env := os.Getenv("NLR_DATA"); env != "" { // separate profile, e.g. for testing
+		d = env
+	}
 	os.MkdirAll(filepath.Join(d, "img"), 0o755)
 	return d
 }

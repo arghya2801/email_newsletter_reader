@@ -6,13 +6,13 @@
   let { issue, onkey, onsave, ontoggleread, ondone } = $props()
 
   let frame = $state()
-  let height = $state(600)
+  let height = $state(150)
   let highlights = $state([...(issue.highlights ?? [])])
   let pop = $state(null) // { kind: 'new' | 'note', x, y, h? }
 
   // Newsletters are designed for white; keep that, and style marks inside the frame.
   const inject = `<style>
-    html{background:#fff}
+    html{background:#fff;overflow:hidden}
     mark.nl-hl{color:inherit;cursor:pointer;border-radius:.8em .3em;padding:.05em .1em;
       -webkit-box-decoration-break:clone;box-decoration-break:clone;
       background:linear-gradient(104deg,transparent .9%,rgba(242,201,76,.55) 2.4%,rgba(242,201,76,.2) 5.8%,rgba(242,201,76,.55) 93%,rgba(242,201,76,.55) 96%,transparent 98%),
@@ -145,7 +145,7 @@
 
 <style>
   .sheet {
-    max-width: 820px; margin: 24px auto 64px; background: var(--paper);
+    max-width: 820px; margin: 24px auto 64px; width: calc(100% - 48px); background: var(--paper);
     border: 1px solid var(--rule); border-radius: 3px;
   }
   header { padding: 32px 40px 20px; }

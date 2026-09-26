@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,5 +78,22 @@ func TestPipeline(t *testing.T) {
 	want := "# Highlights\n\n## Café markets\n\n*Morning Brew, 2026-09-21*\n\n> Café prices\n> rose.\n\n> rose\n\nwhy?\n"
 	if md != want {
 		t.Errorf("markdown:\n%q\nwant\n%q", md, want)
+	}
+}
+
+func TestFetchImageCaches(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\nfake"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(png)) }))
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "img"), 0o755)
+	for i := 0; i < 2; i++ { // second call must come from disk
+		b, ct, err := fetchImage(dir, srv.URL+"/a.png")
+		if err != nil || string(b) != png || ct != "image/png" {
+			t.Fatalf("call %d: %q %q %v", i, b, ct, err)
+		}
+		srv.Close()
+	}
+	if _, _, err := fetchImage(dir, "file:///c:/windows/win.ini"); err == nil {
+		t.Error("non-http url accepted")
 	}
 }
