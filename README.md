@@ -40,7 +40,7 @@ Requires Go 1.26+, Node 20+, and the Wails CLI (`go install github.com/wailsapp/
 
 ```sh
 wails dev            # live reload
-wails build          # build/bin/email_newsletter_reader.exe
+wails build          # build/bin/Newsletters.exe
 go test ./...        # parsing, HTML rewrite, store, export, sync against an in-memory IMAP server
 ```
 
