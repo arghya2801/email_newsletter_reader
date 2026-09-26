@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -47,22 +52,27 @@ func saveConfig(dir string, c Config) error {
 	return os.WriteFile(filepath.Join(dir, "config.json"), b, 0o600)
 }
 
+// messages holds only small metadata so sorting, counting and filtering scan
+// a few hundred bytes per row; bodies are compressed and read one at a time.
+// fts is contentless: it indexes the text without storing a second copy.
+const slimMessages = `(
+  id INTEGER PRIMARY KEY, message_id TEXT UNIQUE NOT NULL,
+  from_name TEXT NOT NULL, from_addr TEXT NOT NULL, subject TEXT NOT NULL, date INTEGER NOT NULL,
+  words INTEGER NOT NULL, read INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)`
+
 const schema = `
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
-CREATE TABLE IF NOT EXISTS messages(
-  id INTEGER PRIMARY KEY, message_id TEXT UNIQUE NOT NULL,
-  from_name TEXT NOT NULL, from_addr TEXT NOT NULL, subject TEXT NOT NULL, date INTEGER NOT NULL,
-  html TEXT NOT NULL, text TEXT NOT NULL, words INTEGER NOT NULL,
-  read INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS messages` + slimMessages + `;
 CREATE INDEX IF NOT EXISTS messages_date ON messages(date);
+CREATE TABLE IF NOT EXISTS bodies(id INTEGER PRIMARY KEY REFERENCES messages(id), html BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS message_labels(
   message_id INTEGER NOT NULL REFERENCES messages(id), label TEXT NOT NULL, PRIMARY KEY(message_id, label));
 CREATE TABLE IF NOT EXISTS label_state(label TEXT PRIMARY KEY, uidvalidity INTEGER NOT NULL, last_uid INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS highlights(
   id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL REFERENCES messages(id),
   text TEXT NOT NULL, prefix TEXT NOT NULL, suffix TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL);
-CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(subject, from_name, text, content='messages', content_rowid='id');
+CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(subject, from_name, text, content='');
 `
 
 type Store struct{ db *sql.DB }
@@ -76,7 +86,99 @@ func openStore(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
+	if err := migrateV1(db); err != nil {
+		return nil, fmt.Errorf("upgrade cache: %w", err)
+	}
 	return &Store{db}, nil
+}
+
+// migrateV1 upgrades the first schema (html + text inline in messages) in
+// place, keeping ids so read state, labels and highlights survive.
+func migrateV1(db *sql.DB) error {
+	var old int
+	db.QueryRow(`SELECT count(*) FROM pragma_table_info('messages') WHERE name='html'`).Scan(&old)
+	if old == 0 {
+		return nil
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		return err
+	}
+	defer db.Exec(`PRAGMA foreign_keys=ON`)
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`CREATE TABLE messages_new` + slimMessages,
+		`INSERT INTO messages_new SELECT id,message_id,from_name,from_addr,subject,date,words,read,hidden FROM messages`,
+		`DROP TABLE fts`,
+		`CREATE VIRTUAL TABLE fts USING fts5(subject, from_name, text, content='')`,
+		`INSERT INTO fts(rowid,subject,from_name,text) SELECT id,subject,from_name,text FROM messages`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	for last := int64(0); ; {
+		type body struct {
+			id   int64
+			html string
+		}
+		var page []body
+		rows, err := tx.Query(`SELECT id,html FROM messages WHERE id>? ORDER BY id LIMIT 200`, last)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var b body
+			rows.Scan(&b.id, &b.html)
+			page = append(page, b)
+		}
+		rows.Close()
+		if len(page) == 0 {
+			break
+		}
+		for _, b := range page {
+			if _, err := tx.Exec(`INSERT INTO bodies VALUES(?,?)`, b.id, pack(b.html)); err != nil {
+				return err
+			}
+		}
+		last = page[len(page)-1].id
+	}
+	for _, q := range []string{
+		`DROP TABLE messages`,
+		`ALTER TABLE messages_new RENAME TO messages`,
+		`CREATE INDEX messages_date ON messages(date)`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	_, err = db.Exec(`VACUUM`) // give the freed space back to the disk
+	return err
+}
+
+var packers = sync.Pool{New: func() any { w, _ := flate.NewWriter(nil, flate.DefaultCompression); return w }}
+
+func pack(s string) []byte {
+	var b bytes.Buffer
+	w := packers.Get().(*flate.Writer)
+	w.Reset(&b)
+	io.WriteString(w, s)
+	w.Close()
+	packers.Put(w)
+	return b.Bytes()
+}
+
+func unpack(b []byte) (string, error) {
+	r := flate.NewReader(bytes.NewReader(b))
+	defer r.Close()
+	out, err := io.ReadAll(r)
+	return string(out), err
 }
 
 type Msg struct {
@@ -94,15 +196,18 @@ type Msg struct {
 
 // insert adds m (deduped by Message-ID) and tags it with label.
 func insertMsg(tx *sql.Tx, m *Msg, label string) error {
-	res, err := tx.Exec(`INSERT INTO messages(message_id,from_name,from_addr,subject,date,html,text,words,read)
-		VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING`,
-		m.MessageID, m.FromName, m.FromAddr, m.Subject, m.Date, m.HTML, m.Text, m.Words, m.Read)
+	res, err := tx.Exec(`INSERT INTO messages(message_id,from_name,from_addr,subject,date,words,read)
+		VALUES(?,?,?,?,?,?,?) ON CONFLICT(message_id) DO NOTHING`,
+		m.MessageID, m.FromName, m.FromAddr, m.Subject, m.Date, m.Words, m.Read)
 	if err != nil {
 		return err
 	}
 	var id int64
 	if n, _ := res.RowsAffected(); n == 1 {
 		id, _ = res.LastInsertId()
+		if _, err := tx.Exec(`INSERT INTO bodies VALUES(?,?)`, id, pack(m.HTML)); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`INSERT INTO fts(rowid,subject,from_name,text) VALUES(?,?,?,?)`, id, m.Subject, m.FromName, m.Text); err != nil {
 			return err
 		}
@@ -229,8 +334,13 @@ func (s *Store) Labels() ([]Count, error) {
 
 func (s *Store) Get(id int64) (Msg, error) {
 	var m Msg
-	err := s.db.QueryRow(`SELECT id,from_name,from_addr,subject,date,html,text,words,read FROM messages WHERE id=?`, id).
-		Scan(&m.ID, &m.FromName, &m.FromAddr, &m.Subject, &m.Date, &m.HTML, &m.Text, &m.Words, &m.Read)
+	var body []byte
+	err := s.db.QueryRow(`SELECT m.id,from_name,from_addr,subject,date,b.html,words,read FROM messages m JOIN bodies b ON b.id=m.id WHERE m.id=?`, id).
+		Scan(&m.ID, &m.FromName, &m.FromAddr, &m.Subject, &m.Date, &body, &m.Words, &m.Read)
+	if err != nil {
+		return m, err
+	}
+	m.HTML, err = unpack(body)
 	return m, err
 }
 
