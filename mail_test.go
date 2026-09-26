@@ -1,12 +1,19 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/emersion/go-imap/v2"
+	"github.com/emersion/go-imap/v2/imapclient"
+	"github.com/emersion/go-imap/v2/imapserver"
+	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
 )
 
 const fixture = "From: Morning Brew <crew@MorningBrew.com>\r\n" +
@@ -95,5 +102,72 @@ func TestFetchImageCaches(t *testing.T) {
 	}
 	if _, _, err := fetchImage(dir, "file:///c:/windows/win.ini"); err == nil {
 		t.Error("non-http url accepted")
+	}
+}
+
+// TestSync runs the real sync against go-imap's in-memory server: batching,
+// resume from last UID, dedupe across labels, and that the mailbox is untouched.
+func TestSync(t *testing.T) {
+	mem := imapmemserver.New()
+	u := imapmemserver.NewUser("me", "pw")
+	mem.AddUser(u)
+	u.Create("News", nil)
+	u.Create("Fin", nil)
+	srv := imapserver.New(&imapserver.Options{
+		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
+			return mem.NewSession(), nil, nil
+		},
+		Caps:         imap.CapSet{imap.CapIMAP4rev1: {}},
+		InsecureAuth: true,
+	})
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	go srv.Serve(ln)
+	defer srv.Close()
+
+	cl, err := imapclient.DialInsecure(ln.Addr().String(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	cl.Login("me", "pw").Wait()
+	add := func(box string, i int) {
+		raw := []byte(strings.Replace(fixture, "<abc@mb>", fmt.Sprintf("<m%d@x>", i), 1))
+		cmd := cl.Append(box, int64(len(raw)), nil)
+		cmd.Write(raw)
+		cmd.Close()
+		if _, err := cmd.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 120; i++ {
+		add("News", i)
+	}
+	add("Fin", 7) // same issue filed under two labels
+
+	s, _ := openStore(filepath.Join(t.TempDir(), "t.db"))
+	defer s.db.Close()
+	count := func() (n int) { s.db.QueryRow(`SELECT count(*) FROM messages`).Scan(&n); return }
+	var calls []int
+	if err := s.syncLabel(cl, "News", func(n int) { calls = append(calls, n) }); err != nil {
+		t.Fatal(err)
+	}
+	if count() != 120 || fmt.Sprint(calls) != "[50 100 120]" {
+		t.Fatalf("first sync: %d rows, progress %v", count(), calls)
+	}
+	add("News", 500)
+	calls = nil
+	s.syncLabel(cl, "News", func(n int) { calls = append(calls, n) })
+	if count() != 121 || fmt.Sprint(calls) != "[1]" {
+		t.Fatalf("resume: %d rows, progress %v", count(), calls)
+	}
+	s.syncLabel(cl, "Fin", func(int) {})
+	if l, _ := s.List(Query{Label: "Fin"}); count() != 121 || len(l) != 1 {
+		t.Fatalf("dedupe: %d rows, Fin has %d", count(), len(l))
+	}
+
+	cl.Select("News", nil).Wait()
+	msgs, _ := cl.Fetch(imap.SeqSetNum(1), &imap.FetchOptions{Flags: true}).Collect()
+	if len(msgs[0].Flags) != 0 {
+		t.Errorf("sync changed server flags: %v", msgs[0].Flags)
 	}
 }
