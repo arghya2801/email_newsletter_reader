@@ -1,0 +1,118 @@
+<script>
+  import { onMount } from 'svelte'
+  import { GetConfig, SaveConfig, ServerLabels, ChooseSaveDir } from '../wailsjs/go/main/App'
+  import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
+
+  let { onsaved } = $props()
+  let cfg = $state(null)
+  let serverLabels = $state([])
+  let filter = $state('')
+  let busy = $state(false)
+  let error = $state('')
+
+  let shown = $derived(
+    [...new Set([...(cfg?.labels ?? []), ...serverLabels])]
+      .filter((l) => l.toLowerCase().includes(filter.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b)),
+  )
+
+  onMount(async () => {
+    cfg = await GetConfig()
+    cfg.labels ??= []
+  })
+
+  async function loadLabels() {
+    busy = true
+    error = ''
+    try {
+      await SaveConfig(cfg)
+      serverLabels = (await ServerLabels()) ?? []
+    } catch (e) {
+      error = String(e)
+    }
+    busy = false
+  }
+
+  function toggle(l) {
+    cfg.labels = cfg.labels.includes(l) ? cfg.labels.filter((x) => x !== l) : [...cfg.labels, l]
+  }
+
+  async function pickDir() {
+    const d = await ChooseSaveDir()
+    if (d) cfg.saveDir = d
+  }
+
+  async function save(e) {
+    e.preventDefault()
+    await SaveConfig({ ...cfg, syncMinutes: +cfg.syncMinutes || 15 })
+    onsaved()
+  }
+</script>
+
+{#if cfg}
+  <form class="settings" onsubmit={save}>
+    <h1>Settings</h1>
+    {#if !cfg.password}
+      <p>Connect your Gmail account to start. The app only reads the labels you pick; it never changes your mailbox.</p>
+    {/if}
+
+    <label>Gmail address <input type="email" bind:value={cfg.user} required autocomplete="username" /></label>
+    <label>
+      App password
+      <input type="password" bind:value={cfg.password} required autocomplete="current-password" />
+      <span class="hint muted">
+        Not your normal password. Create one at
+        <a href="https://myaccount.google.com/apppasswords" onclick={(e) => { e.preventDefault(); BrowserOpenURL(e.currentTarget.href) }}>myaccount.google.com/apppasswords</a>
+        (needs 2-step verification). IMAP must be on in Gmail settings.
+      </span>
+    </label>
+
+    <fieldset>
+      <legend>Labels to read</legend>
+      <div class="labels-tools">
+        <button type="button" onclick={loadLabels} disabled={busy || !cfg.user || !cfg.password}>
+          {busy ? 'Loading labels…' : serverLabels.length ? 'Reload labels' : 'Load labels from Gmail'}
+        </button>
+        {#if serverLabels.length}<input placeholder="Filter labels" bind:value={filter} aria-label="Filter labels" />{/if}
+      </div>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      <div class="labels">
+        {#each shown as l (l)}
+          <label class="check"><input type="checkbox" checked={cfg.labels.includes(l)} onchange={() => toggle(l)} /> {l}</label>
+        {/each}
+      </div>
+    </fieldset>
+
+    <label>
+      Save folder
+      <span class="dir"><input bind:value={cfg.saveDir} /><button type="button" onclick={pickDir}>Choose…</button></span>
+      <span class="hint muted">Saved issues and highlights.md go here.</span>
+    </label>
+    <label>Check for new issues every <span class="dir"><input type="number" min="1" bind:value={cfg.syncMinutes} style="width:80px" /> minutes</span></label>
+
+    <div><button class="primary" type="submit" disabled={!cfg.labels.length}>Save and sync</button></div>
+  </form>
+{/if}
+
+<style>
+  .settings { max-width: 560px; margin: 0 auto; padding: 40px 32px 80px; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font: 500 36px/1.1 var(--serif); font-optical-sizing: auto; margin: 0; }
+  p { margin: 0; }
+  label:not(.check) { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
+  .hint { font-weight: 400; font-size: 13px; }
+  .hint a { color: inherit; }
+  fieldset { border: 0; padding: 0; margin: 0; }
+  legend { font-weight: 500; padding: 0; margin-bottom: 6px; }
+  .labels-tools { display: flex; gap: 8px; }
+  .labels-tools input { flex: 1; }
+  .labels { max-height: 260px; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; }
+  .check { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  .dir { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+  .dir input:first-child { flex: 1; }
+  .error { color: #b3261e; }
+  @media (prefers-color-scheme: dark) { .error { color: #f2b8b5; } }
+  button { border: 1px solid var(--rule); }
+  .primary { background: var(--ink); color: var(--paper); border-color: var(--ink); padding: 6px 14px; }
+  .primary:hover { background: var(--ink); opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: default; }
+</style>

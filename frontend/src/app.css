@@ -1,0 +1,60 @@
+:root {
+  --chrome: #e6e9ed;
+  --paper: #fdfdfc;
+  --ink: #1f2733;
+  --muted: #6b7584;
+  --rule: #d3d8df;
+  --mark: rgba(242, 201, 76, 0.55);
+  --mark-edge: rgba(242, 201, 76, 0.2);
+  --focus: #3d6fb6;
+  --serif: 'Newsreader Variable', Georgia, serif;
+  --sans: 'Public Sans Variable', system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chrome: #1a1d22;
+    --paper: #23272e;
+    --ink: #e4e7eb;
+    --muted: #97a0ad;
+    --rule: #33383f;
+    --mark: rgba(217, 169, 40, 0.5);
+    --mark-edge: rgba(217, 169, 40, 0.18);
+    --focus: #8fb4ec;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--chrome);
+  color: var(--ink);
+  font: 14px/1.45 var(--sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  background: none; border: 0; padding: 4px 8px; border-radius: 4px; cursor: pointer;
+}
+button:hover { background: var(--rule); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+input, select, textarea {
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 8px;
+}
+::selection { background: var(--mark); }
+
+/* The one loud thing: a marker stroke with uneven ends, shared by reader and highlights page. */
+.marker {
+  background:
+    linear-gradient(104deg, transparent 0.9%, var(--mark) 2.4%, var(--mark-edge) 5.8%, var(--mark) 93%, var(--mark) 96%, transparent 98%),
+    linear-gradient(183deg, transparent 0%, var(--mark-edge) 8%, transparent 15%);
+  border-radius: 0.8em 0.3em;
+  padding: 0.05em 0.15em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.muted { color: var(--muted); }
+.serif { font-family: var(--serif); }
