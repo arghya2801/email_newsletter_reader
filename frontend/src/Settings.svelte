@@ -88,7 +88,7 @@
       <span class="dir"><input bind:value={cfg.saveDir} /><button type="button" onclick={pickDir}>Choose…</button></span>
       <span class="hint muted">Saved issues and highlights.md go here.</span>
     </label>
-    <label>Check for new issues every <span class="dir"><input type="number" min="1" bind:value={cfg.syncMinutes} style="width:80px" /> minutes</span></label>
+    <label>Check for new issues every <span class="dir"><input class="mins" type="number" min="1" bind:value={cfg.syncMinutes} /> minutes</span></label>
 
     <div><button class="primary" type="submit" disabled={!cfg.labels.length}>Save and sync</button></div>
   </form>
@@ -108,7 +108,8 @@
   .labels { max-height: 260px; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; }
   .check { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
   .dir { display: flex; gap: 8px; align-items: center; font-weight: 400; }
-  .dir input:first-child { flex: 1; }
+  .dir input:first-child:not(.mins) { flex: 1; }
+  .mins { width: 80px; }
   .error { color: #b3261e; }
   @media (prefers-color-scheme: dark) { .error { color: #f2b8b5; } }
   button { border: 1px solid var(--rule); }
