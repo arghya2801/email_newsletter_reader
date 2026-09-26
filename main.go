@@ -2,6 +2,9 @@ package main
 
 import (
 	"embed"
+	"log"
+	"net/http"
+	"path/filepath"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,25 +15,41 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
-	app := NewApp()
+	dir := dataDir()
+	store, err := openStore(filepath.Join(dir, "cache.db"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	app := NewApp(dir, store)
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		Title:  "newsletter-reader",
-		Width:  1024,
-		Height: 768,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		Bind: []interface{}{
-			app,
-		},
+	// /img?u=<remote url> serves newsletter images from the disk cache.
+	imgs := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/img" {
+			http.NotFound(w, r)
+			return
+		}
+		b, ct, err := fetchImage(dir, r.URL.Query().Get("u"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("Cache-Control", "max-age=31536000")
+		w.Write(b)
 	})
 
+	err = wails.Run(&options.App{
+		Title:            "Newsletters",
+		Width:            1320,
+		Height:           860,
+		MinWidth:         900,
+		MinHeight:        560,
+		AssetServer:      &assetserver.Options{Assets: assets, Handler: imgs},
+		BackgroundColour: &options.RGBA{R: 230, G: 233, B: 237, A: 1},
+		OnStartup:        app.startup,
+		Bind:             []interface{}{app},
+	})
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }
