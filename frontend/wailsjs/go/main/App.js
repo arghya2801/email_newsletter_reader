@@ -54,6 +54,10 @@ export function ServerLabels() {
   return window['go']['main']['App']['ServerLabels']();
 }
 
+export function SetAppearance(arg1, arg2) {
+  return window['go']['main']['App']['SetAppearance'](arg1, arg2);
+}
+
 export function SetHidden(arg1, arg2) {
   return window['go']['main']['App']['SetHidden'](arg1, arg2);
 }

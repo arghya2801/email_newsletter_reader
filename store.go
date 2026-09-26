@@ -23,6 +23,8 @@ type Config struct {
 	Labels      []string `json:"labels"`
 	SaveDir     string   `json:"saveDir"`
 	SyncMinutes int      `json:"syncMinutes"`
+	Density     string   `json:"density"` // "comfortable" or "compact"
+	Scale       int      `json:"scale"`   // interface size in percent
 }
 
 func dataDir() string {
@@ -40,7 +42,7 @@ func dataDir() string {
 
 func loadConfig(dir string) Config {
 	home, _ := os.UserHomeDir()
-	c := Config{Host: "imap.gmail.com:993", SaveDir: filepath.Join(home, "Documents", "Newsletters"), SyncMinutes: 15}
+	c := Config{Host: "imap.gmail.com:993", SaveDir: filepath.Join(home, "Documents", "Newsletters"), SyncMinutes: 15, Density: "comfortable", Scale: 100}
 	if b, err := os.ReadFile(filepath.Join(dir, "config.json")); err == nil {
 		json.Unmarshal(b, &c)
 	}

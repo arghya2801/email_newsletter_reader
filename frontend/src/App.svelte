@@ -156,8 +156,17 @@
     }
   }
 
+  // Density and text size apply to the whole document, so Settings can preview them live.
+  function appearance(density, scale) {
+    const root = document.documentElement
+    root.dataset.density = density || 'comfortable'
+    root.style.zoom = (scale || 100) / 100
+    root.style.setProperty('--scale', (scale || 100) / 100)
+  }
+
   onMount(async () => {
     const cfg = await GetConfig()
+    appearance(cfg.density, cfg.scale)
     if (!cfg.password || !cfg.labels?.length) view = 'settings'
     counts()
     return EventsOn('sync', (s) => {
@@ -227,9 +236,9 @@
       }}>
         {#each items as m (m.id)}
           <button class="item" class:unread={!m.read} class:sel={issue?.id === m.id} data-id={m.id} onclick={() => open(m)}>
-            <span class="meta"><span class="from">{m.fromName}</span><span>{fmtDate(m.date)}</span></span>
+            <span class="meta"><span class="from">{m.fromName}</span><span>{fmtDate(m.date)}<span class="inline-mins">, {mins(m.words)} min</span></span></span>
             <span class="subj">{m.subject || '(no subject)'}</span>
-            <span class="meta">{mins(m.words)} min read</span>
+            <span class="meta mins">{mins(m.words)} min read</span>
           </button>
         {:else}
           <p class="empty muted">
@@ -244,7 +253,7 @@
 
   <main class="main">
     {#if view === 'settings'}
-      <Settings onsaved={() => { view = 'reader'; Sync() }} />
+      <Settings onsaved={() => { view = 'reader'; Sync() }} onappearance={appearance} />
     {:else if view === 'highlights'}
       <Highlights onopen={(id) => open({ id, read: true })} />
     {:else if issue}
@@ -267,10 +276,10 @@
 <style>
   .app {
     display: grid;
-    grid-template-columns: 232px 360px 1fr;
-    height: 100vh;
+    grid-template-columns: var(--side-w) var(--list-w) 1fr;
+    height: calc(100vh / var(--scale, 1)); /* zoom shrinks vh; undo it */
   }
-  .app.wide { grid-template-columns: 232px 1fr; }
+  .app.wide { grid-template-columns: var(--side-w) 1fr; }
 
   .side {
     display: flex; flex-direction: column; min-height: 0;
@@ -278,7 +287,7 @@
   }
   .row {
     display: flex; justify-content: space-between; gap: 8px; width: 100%;
-    text-align: left; padding: 5px 10px;
+    text-align: left; padding: var(--nav-py) 10px;
   }
   .row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row.on { background: var(--paper); }
@@ -292,19 +301,21 @@
   .sync button { flex: none; font-size: 12px; }
 
   .list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--rule); }
-  .tools { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--rule); }
+  .tools { display: flex; gap: 8px; padding: var(--tools-p); border-bottom: 1px solid var(--rule); }
   .tools input { flex: 1; min-width: 0; }
   .items { overflow-y: auto; flex: 1; }
   .item {
-    display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
-    padding: 12px 16px; border-radius: 0; border-bottom: 1px solid var(--rule);
+    display: flex; flex-direction: column; gap: var(--row-gap); width: 100%; text-align: left;
+    padding: var(--row-py) var(--row-px); border-radius: 0; border-bottom: 1px solid var(--rule);
   }
   .item:hover { background: color-mix(in srgb, var(--paper) 50%, var(--chrome)); }
   .item.sel { background: var(--paper); }
   .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .meta.mins { display: var(--mins-row); }
+  .inline-mins { display: var(--mins-inline); }
   .from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .subj {
-    font: 400 17px/1.3 var(--serif); font-optical-sizing: auto;
+    font: 400 var(--subj-size)/1.3 var(--serif); font-optical-sizing: auto;
     color: color-mix(in srgb, var(--ink) 75%, var(--chrome));
   }
   .unread .subj { font-weight: 600; color: var(--ink); }

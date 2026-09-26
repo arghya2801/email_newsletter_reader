@@ -1,9 +1,9 @@
 <script>
   import { onMount } from 'svelte'
-  import { GetConfig, SaveConfig, ServerLabels, ChooseSaveDir } from '../wailsjs/go/main/App'
+  import { GetConfig, SaveConfig, ServerLabels, ChooseSaveDir, SetAppearance } from '../wailsjs/go/main/App'
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 
-  let { onsaved } = $props()
+  let { onsaved, onappearance } = $props()
   let cfg = $state(null)
   let serverLabels = $state([])
   let filter = $state('')
@@ -42,6 +42,16 @@
     if (d) cfg.saveDir = d
   }
 
+  const sizes = [[90, 'Small'], [100, 'Default'], [110, 'Large']]
+
+  // Appearance saves on its own, right away, without touching unsaved account fields.
+  function look(density, scale) {
+    cfg.density = density
+    cfg.scale = scale
+    onappearance(density, scale)
+    SetAppearance(density, scale)
+  }
+
   async function save(e) {
     e.preventDefault()
     await SaveConfig({ ...cfg, syncMinutes: +cfg.syncMinutes || 15 })
@@ -52,6 +62,25 @@
 {#if cfg}
   <form class="settings" onsubmit={save}>
     <h1>Settings</h1>
+    <fieldset>
+      <legend>Appearance</legend>
+      <div class="look">
+        <span class="muted">Density</span>
+        <div class="seg" role="radiogroup" aria-label="Density">
+          {#each [['comfortable', 'Comfortable'], ['compact', 'Compact']] as [v, label]}
+            <label><input type="radio" name="density" value={v} checked={(cfg.density || 'comfortable') === v} onchange={() => look(v, cfg.scale || 100)} /> {label}</label>
+          {/each}
+        </div>
+        <span class="muted">Text size</span>
+        <div class="seg" role="radiogroup" aria-label="Text size">
+          {#each sizes as [v, label]}
+            <label><input type="radio" name="scale" value={v} checked={(cfg.scale || 100) === v} onchange={() => look(cfg.density || 'comfortable', v)} /> {label}</label>
+          {/each}
+        </div>
+      </div>
+      <span class="hint muted">Compact fits more issues on screen: narrower panes, tighter rows, reading time on the date line. Changes apply immediately.</span>
+    </fieldset>
+
     {#if !cfg.password}
       <p>Connect your Gmail account to start. The app only reads the labels you pick; it never changes your mailbox.</p>
     {/if}
@@ -106,6 +135,15 @@
   .labels-tools { display: flex; gap: 8px; }
   .labels-tools input { flex: 1; }
   .labels { max-height: 260px; overflow-y: auto; margin-top: 8px; display: flex; flex-direction: column; }
+  .look { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; margin-bottom: 6px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+  .seg label {
+    display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: 400; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 4px; padding: 4px 10px;
+  }
+  .seg label:has(input:checked) { border-color: var(--ink); background: var(--paper); }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
   .check { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
   .dir { display: flex; gap: 8px; align-items: center; font-weight: 400; }
   .dir input:first-child:not(.mins) { flex: 1; }

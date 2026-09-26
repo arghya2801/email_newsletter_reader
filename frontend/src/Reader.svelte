@@ -145,12 +145,12 @@
 
 <style>
   .sheet {
-    max-width: 820px; margin: 24px auto 64px; width: calc(100% - 48px); background: var(--paper);
+    max-width: 820px; margin: var(--sheet-m) auto 64px; width: calc(100% - 2 * var(--sheet-m)); background: var(--paper);
     border: 1px solid var(--rule); border-radius: 3px;
   }
-  header { padding: 32px 40px 20px; }
+  header { padding: var(--head-p); }
   h1 {
-    font: 500 30px/1.15 var(--serif); font-optical-sizing: auto; letter-spacing: -0.01em;
+    font: 500 var(--h1-size)/1.15 var(--serif); font-optical-sizing: auto; letter-spacing: -0.01em;
     margin: 0 0 10px; text-wrap: balance;
   }
   .by { margin: 0 0 16px; }

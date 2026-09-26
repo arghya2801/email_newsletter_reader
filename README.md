@@ -24,6 +24,8 @@ The first sync pulls the full history of those labels. After that it only fetche
 | `g h` / `g i` / `g s` | Highlights / issues / settings |
 | `Esc` | Close note, leave a text field |
 
+Settings → Appearance switches between Comfortable and Compact density (narrower panes, tighter rows) and three text sizes; changes apply immediately.
+
 Click a highlight to add a note or remove it. The Highlights page exports everything to `highlights.md` in your save folder, grouped by issue, or copies it to the clipboard.
 
 Saved HTML files have their images embedded, so they open offline. Images in the reader are fetched by the app and cached on disk, and 1×1 tracking pixels are stripped. Scripts in emails never run.

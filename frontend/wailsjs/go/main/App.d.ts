@@ -28,6 +28,8 @@ export function Senders(arg1:string):Promise<Array<main.Count>>;
 
 export function ServerLabels():Promise<Array<string>>;
 
+export function SetAppearance(arg1:string,arg2:number):Promise<void>;
+
 export function SetHidden(arg1:number,arg2:boolean):Promise<void>;
 
 export function SetNote(arg1:number,arg2:string):Promise<void>;

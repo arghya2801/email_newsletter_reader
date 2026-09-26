@@ -53,6 +53,19 @@ func (a *App) SaveConfig(c Config) error {
 	return saveConfig(a.dir, c)
 }
 
+// SetAppearance saves only the display settings, so unsaved account edits stay unsaved.
+func (a *App) SetAppearance(density string, scale int) error {
+	if density != "compact" {
+		density = "comfortable"
+	}
+	scale = min(max(scale, 80), 130)
+	a.mu.Lock()
+	a.cfg.Density, a.cfg.Scale = density, scale
+	c := a.cfg
+	a.mu.Unlock()
+	return saveConfig(a.dir, c)
+}
+
 func (a *App) ServerLabels() ([]string, error) { return serverLabels(a.config()) }
 
 func (a *App) ChooseSaveDir() (string, error) {

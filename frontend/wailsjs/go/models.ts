@@ -7,6 +7,8 @@ export namespace main {
 	    labels: string[];
 	    saveDir: string;
 	    syncMinutes: number;
+	    density: string;
+	    scale: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -20,6 +22,8 @@ export namespace main {
 	        this.labels = source["labels"];
 	        this.saveDir = source["saveDir"];
 	        this.syncMinutes = source["syncMinutes"];
+	        this.density = source["density"];
+	        this.scale = source["scale"];
 	    }
 	}
 	export class Count {
