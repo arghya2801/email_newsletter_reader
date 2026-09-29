@@ -31,6 +31,7 @@ The first sync pulls the full history of those labels. After that it only fetche
 | `e` | Done (hides it; Undo in the toast) |
 | `r` | Sync now |
 | `g h` / `g i` / `g s` | Highlights / issues / settings |
+| `Ctrl+Plus` / `Minus` / `0`, `Ctrl`+scroll | Zoom the newsletter only (remembered; click the % to reset) |
 | `Ctrl+Shift+Plus` / `Minus` / `0` | Zoom the whole app in / out / reset |
 | `Esc` | Close note, leave a text field |
 

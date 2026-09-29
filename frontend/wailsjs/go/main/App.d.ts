@@ -36,4 +36,6 @@ export function SetNote(arg1:number,arg2:string):Promise<void>;
 
 export function SetRead(arg1:number,arg2:boolean):Promise<void>;
 
+export function SetReaderZoom(arg1:number):Promise<void>;
+
 export function Sync():Promise<void>;

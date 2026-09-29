@@ -70,6 +70,10 @@ export function SetRead(arg1, arg2) {
   return window['go']['main']['App']['SetRead'](arg1, arg2);
 }
 
+export function SetReaderZoom(arg1) {
+  return window['go']['main']['App']['SetReaderZoom'](arg1);
+}
+
 export function Sync() {
   return window['go']['main']['App']['Sync']();
 }
