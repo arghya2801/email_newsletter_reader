@@ -77,7 +77,7 @@
     </fieldset>
 
     {#if !cfg.password}
-      <p>Connect your Gmail account to start. The app only reads the labels you pick; it never changes your mailbox.</p>
+      <p>Connect your Gmail account to start. The app reads the labels you pick. The only change it makes in Gmail is marking an issue read when you open it.</p>
     {/if}
 
     <label>Gmail address <input type="email" bind:value={cfg.user} required autocomplete="username" /></label>

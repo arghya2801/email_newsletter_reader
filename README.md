@@ -1,6 +1,6 @@
 # Newsletters
 
-A small desktop reader for the newsletters your Gmail filters already sort into labels. It is not an email client: it only reads the labels you pick and never changes anything in your mailbox. Read state, "done" and highlights stay in the app.
+A small desktop reader for the newsletters your Gmail filters already sort into labels. It is not an email client: it reads the labels you pick, and the only change it makes in your mailbox is marking an issue read in Gmail when you open it. "Mark unread", "done" and highlights stay in the app.
 
 ## Install
 

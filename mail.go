@@ -130,6 +130,60 @@ func (s *Store) syncLabel(cl *imapclient.Client, label string, progress func(int
 	return cmd.Close()
 }
 
+// pushSeen marks queued issues read in Gmail. Gmail keeps flags per message,
+// not per label, so finding it by Message-ID in any one of its labels is enough.
+// Rows stay queued on error, so the next call retries them.
+// ponytail: a label deleted in Gmail keeps its rows queued and retried each sync.
+func (s *Store) pushSeen(cl *imapclient.Client) error {
+	type item struct {
+		id           int64
+		msgID, label string
+	}
+	rows, err := s.db.Query(`SELECT p.message_id, m.message_id, min(l.label) FROM pending_seen p
+		JOIN messages m ON m.id=p.message_id JOIN message_labels l ON l.message_id=m.id
+		GROUP BY p.message_id ORDER BY 3`)
+	if err != nil {
+		return err
+	}
+	var items []item
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.id, &it.msgID, &it.label); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	selected := ""
+	for _, it := range items {
+		if !strings.HasPrefix(it.msgID, "nomsgid-") { // synthetic id: nothing to search for
+			if it.label != selected {
+				if _, err := cl.Select(it.label, nil).Wait(); err != nil {
+					return fmt.Errorf("open label %q: %w", it.label, err)
+				}
+				selected = it.label
+			}
+			found, err := cl.UIDSearch(&imap.SearchCriteria{
+				Header: []imap.SearchCriteriaHeaderField{{Key: "Message-ID", Value: it.msgID}},
+			}, nil).Wait()
+			if err != nil {
+				return err
+			}
+			if uids := found.AllUIDs(); len(uids) > 0 { // none: gone from Gmail, drop it
+				store := &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagSeen}}
+				if err := cl.Store(imap.UIDSetNum(uids...), store, nil).Close(); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := s.db.Exec(`DELETE FROM pending_seen WHERE message_id=?`, it.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ponytail: cid: inline images and attachments are ignored; newsletters link remote images.
 func parseMsg(raw []byte) (*Msg, error) {
 	mr, err := mail.CreateReader(bytes.NewReader(raw))
