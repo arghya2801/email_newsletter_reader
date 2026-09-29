@@ -75,6 +75,14 @@ func (a *App) SetAppearance(density string, scale int) error {
 	return saveConfig(a.dir, c)
 }
 
+func (a *App) SetReaderZoom(zoom int) error {
+	a.mu.Lock()
+	a.cfg.ReaderZoom = min(max(zoom, 50), 200)
+	c := a.cfg
+	a.mu.Unlock()
+	return saveConfig(a.dir, c)
+}
+
 func (a *App) ServerLabels() ([]string, error) { return serverLabels(a.config()) }
 
 func (a *App) ChooseSaveDir() (string, error) {

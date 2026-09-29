@@ -9,6 +9,7 @@ export namespace main {
 	    syncMinutes: number;
 	    density: string;
 	    scale: number;
+	    readerZoom: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -24,6 +25,7 @@ export namespace main {
 	        this.syncMinutes = source["syncMinutes"];
 	        this.density = source["density"];
 	        this.scale = source["scale"];
+	        this.readerZoom = source["readerZoom"];
 	    }
 	}
 	export class Count {

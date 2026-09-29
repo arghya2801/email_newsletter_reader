@@ -23,8 +23,9 @@ type Config struct {
 	Labels      []string `json:"labels"`
 	SaveDir     string   `json:"saveDir"`
 	SyncMinutes int      `json:"syncMinutes"`
-	Density     string   `json:"density"` // "comfortable" or "compact"
-	Scale       int      `json:"scale"`   // interface size in percent
+	Density     string   `json:"density"`    // "comfortable" or "compact"
+	Scale       int      `json:"scale"`      // interface size in percent
+	ReaderZoom  int      `json:"readerZoom"` // newsletter body zoom in percent
 }
 
 // dataDir picks where settings and the cache live: $NLR_DATA if set; a "data"
@@ -55,7 +56,7 @@ func loadConfig(dir string, portable bool) Config {
 	if portable {
 		save = "Saved" // relative to the data folder, so it survives a new drive letter
 	}
-	c := Config{Host: "imap.gmail.com:993", SaveDir: save, SyncMinutes: 15, Density: "comfortable", Scale: 100}
+	c := Config{Host: "imap.gmail.com:993", SaveDir: save, SyncMinutes: 15, Density: "comfortable", Scale: 100, ReaderZoom: 100}
 	if b, err := os.ReadFile(filepath.Join(dir, "config.json")); err == nil {
 		json.Unmarshal(b, &c)
 	}

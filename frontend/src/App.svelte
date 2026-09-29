@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { GetConfig, Labels, Senders, List, Open, SetRead, SetHidden, SaveEmail, Sync, SetAppearance } from '../wailsjs/go/main/App'
+  import { GetConfig, Labels, Senders, List, Open, SetRead, SetHidden, SaveEmail, Sync, SetAppearance, SetReaderZoom } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
   import Reader from './Reader.svelte'
   import Highlights from './Highlights.svelte'
@@ -123,19 +123,27 @@
     })
   }
 
-  // Ctrl+Shift +/-/0 zooms the whole app; plain Ctrl is left for the reader.
+  // Ctrl+Shift +/-/0 zooms the whole app; plain Ctrl +/-/0 (and Ctrl+wheel) only the newsletter.
   const zoomKeys = { Equal: 1, NumpadAdd: 1, Minus: -1, NumpadSubtract: -1, Digit0: 0, Numpad0: 0 }
-  function zoomApp(d) {
-    const i = zooms.indexOf(look.scale)
-    const scale = d === 0 ? 100 : zooms[Math.min(Math.max((i < 0 ? zooms.indexOf(100) : i) + d, 0), zooms.length - 1)]
-    setLook(look.density, scale)
+  const readerZooms = [50, 67, 80, 90, 100, 110, 125, 150, 175, 200]
+  const step = (levels, cur, d) => {
+    const i = levels.indexOf(cur)
+    return d === 0 ? 100 : levels[Math.min(Math.max((i < 0 ? levels.indexOf(100) : i) + d, 0), levels.length - 1)]
+  }
+  const zoomApp = (d) => setLook(look.density, step(zooms, look.scale, d))
+  let readerZoom = $state(100)
+  function zoomReader(d) {
+    readerZoom = step(readerZooms, readerZoom, d)
+    SetReaderZoom(readerZoom)
   }
 
   let gPending = false
   function onkey(e) {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code in zoomKeys) {
-      e.preventDefault()
-      return zoomApp(zoomKeys[e.code])
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.code in zoomKeys) {
+      if (e.shiftKey) zoomApp(zoomKeys[e.code])
+      else if (view === 'reader' && issue) zoomReader(zoomKeys[e.code])
+      else return
+      return e.preventDefault()
     }
     if (e.target?.closest?.('input, textarea, select')) {
       if (e.key === 'Escape') e.target.blur()
@@ -185,6 +193,7 @@
   onMount(async () => {
     const cfg = await GetConfig()
     appearance(cfg.density, cfg.scale)
+    readerZoom = cfg.readerZoom || 100
     if (!cfg.password || !cfg.labels?.length) view = 'settings'
     counts()
     return EventsOn('sync', (s) => {
@@ -276,7 +285,7 @@
       <Highlights onopen={(id) => open({ id, read: true })} />
     {:else if issue}
       {#key issue.id}
-        <Reader bind:this={reader} {issue} {onkey} onsave={save} ontoggleread={toggleRead} ondone={done} />
+        <Reader bind:this={reader} {issue} {onkey} zoom={readerZoom} onzoom={zoomReader} onsave={save} ontoggleread={toggleRead} ondone={done} />
       {/key}
     {:else}
       <p class="empty muted">Pick an issue on the left, or press j.</p>

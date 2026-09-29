@@ -3,10 +3,9 @@
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
   import { findRange, paint, unpaint, context } from './anchor.js'
 
-  let { issue, onkey, onsave, ontoggleread, ondone } = $props()
+  let { issue, onkey, zoom, onzoom, onsave, ontoggleread, ondone } = $props()
 
   let frame = $state()
-  let height = $state(150)
   let highlights = $state([...(issue.highlights ?? [])])
   let pop = $state(null) // { kind: 'new' | 'note', x, y, h? }
 
@@ -25,11 +24,44 @@
 
   const date = new Date(issue.date * 1000).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
+  // Size the frame to its content so the pane scrolls, not the frame. Zoom is applied
+  // inside the frame; fixed-width newsletters zoomed past the pane widen it instead of clipping.
+  // Measures from zero (scrollHeight never reports less than the frame) and keeps the reading spot.
+  function fit() {
+    const el = frame?.contentDocument?.documentElement
+    if (!el) return
+    const pane = frame.closest('.main')
+    const top = pane ? frame.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop : 0
+    const read = pane ? pane.scrollTop - top : 0
+    const before = frame.offsetHeight
+    el.style.zoom = zoom / 100
+    frame.style.minWidth = frame.style.height = '0'
+    frame.style.minWidth = el.scrollWidth > el.clientWidth ? el.scrollWidth + 'px' : ''
+    frame.style.height = el.scrollHeight + 'px'
+    if (pane && read > 0 && before) pane.scrollTop = top + (read * frame.offsetHeight) / before
+  }
+  $effect(() => {
+    zoom
+    fit()
+  })
+
+  // Ctrl+wheel zooms the newsletter; pixel deltas (touchpads) add up to one step per notch.
+  let wheelSum = 0
+  function onwheel(e) {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    wheelSum += e.deltaY
+    if (Math.abs(wheelSum) >= 50) {
+      onzoom(wheelSum < 0 ? 1 : -1)
+      wheelSum = 0
+    }
+  }
+
   function loaded() {
     const doc = frame.contentDocument
-    const fit = () => (height = doc.documentElement.scrollHeight)
     fit()
     new ResizeObserver(fit).observe(doc.body)
+    doc.addEventListener('wheel', onwheel, { passive: false })
     doc.addEventListener('click', (e) => {
       const mark = e.target.closest?.('mark.nl-hl')
       if (mark) return openNote(mark)
@@ -118,12 +150,15 @@
       <button onclick={() => onsave('md')} title="Shift+S">Save as Markdown</button>
       <button onclick={ontoggleread} title="u">Mark unread</button>
       <button onclick={ondone} title="e">Done</button>
-      {#if highlights.length}<span class="muted count">{highlights.length} highlight{highlights.length > 1 ? 's' : ''}</span>{/if}
+      <span class="right">
+        {#if zoom !== 100}<button class="muted zoom" onclick={() => onzoom(0)} title="Reset zoom (Ctrl+0)">{zoom}%</button>{/if}
+        {#if highlights.length}<span class="muted count">{highlights.length} highlight{highlights.length > 1 ? 's' : ''}</span>{/if}
+      </span>
     </div>
   </header>
 
-  <div class="body">
-    <iframe bind:this={frame} title={issue.subject} sandbox="allow-same-origin" {srcdoc} style:height="{height}px" onload={loaded}></iframe>
+  <div class="body" {onwheel}>
+    <iframe bind:this={frame} title={issue.subject} sandbox="allow-same-origin" {srcdoc} onload={loaded}></iframe>
 
     {#if pop?.kind === 'new'}
       <button class="pop hl" style:left="{pop.x}px" style:top="{pop.y}px" onmousedown={(e) => e.preventDefault()} onclick={highlight} title="h">
@@ -155,9 +190,10 @@
   }
   .by { margin: 0 0 16px; }
   .actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-left: -8px; }
-  .count { margin-left: auto; font-size: 12px; }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .zoom { font-size: 12px; font-variant-numeric: tabular-nums; }
   .body { position: relative; }
-  iframe { display: block; width: 100%; border: 0; border-top: 1px solid var(--rule); background: #fff; }
+  iframe { display: block; width: 100%; height: 150px; border: 0; border-top: 1px solid var(--rule); background: #fff; }
   .pop {
     position: absolute; transform: translate(-50%, calc(-100% - 8px)); z-index: 2;
     background: var(--ink); color: var(--paper); border-radius: 5px;
