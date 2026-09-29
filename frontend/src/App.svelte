@@ -1,10 +1,10 @@
 <script>
   import { onMount } from 'svelte'
-  import { GetConfig, Labels, Senders, List, Open, SetRead, SetHidden, SaveEmail, Sync } from '../wailsjs/go/main/App'
+  import { GetConfig, Labels, Senders, List, Open, SetRead, SetHidden, SaveEmail, Sync, SetAppearance } from '../wailsjs/go/main/App'
   import { EventsOn } from '../wailsjs/runtime/runtime'
   import Reader from './Reader.svelte'
   import Highlights from './Highlights.svelte'
-  import Settings from './Settings.svelte'
+  import Settings, { zooms } from './Settings.svelte'
 
   let view = $state('reader') // reader | highlights | settings
   let q = $state({ label: '', sender: '', search: '', sort: 'new' })
@@ -123,8 +123,20 @@
     })
   }
 
+  // Ctrl+Shift +/-/0 zooms the whole app; plain Ctrl is left for the reader.
+  const zoomKeys = { Equal: 1, NumpadAdd: 1, Minus: -1, NumpadSubtract: -1, Digit0: 0, Numpad0: 0 }
+  function zoomApp(d) {
+    const i = zooms.indexOf(look.scale)
+    const scale = d === 0 ? 100 : zooms[Math.min(Math.max((i < 0 ? zooms.indexOf(100) : i) + d, 0), zooms.length - 1)]
+    setLook(look.density, scale)
+  }
+
   let gPending = false
   function onkey(e) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code in zoomKeys) {
+      e.preventDefault()
+      return zoomApp(zoomKeys[e.code])
+    }
     if (e.target?.closest?.('input, textarea, select')) {
       if (e.key === 'Escape') e.target.blur()
       return
@@ -157,11 +169,17 @@
   }
 
   // Density and text size apply to the whole document, so Settings can preview them live.
+  let look = $state({ density: 'comfortable', scale: 100 })
   function appearance(density, scale) {
+    look = { density: density || 'comfortable', scale: scale || 100 }
     const root = document.documentElement
-    root.dataset.density = density || 'comfortable'
-    root.style.zoom = (scale || 100) / 100
-    root.style.setProperty('--scale', (scale || 100) / 100)
+    root.dataset.density = look.density
+    root.style.zoom = look.scale / 100
+    root.style.setProperty('--scale', look.scale / 100)
+  }
+  function setLook(density, scale) {
+    appearance(density, scale)
+    SetAppearance(look.density, look.scale)
   }
 
   onMount(async () => {
@@ -253,7 +271,7 @@
 
   <main class="main">
     {#if view === 'settings'}
-      <Settings onsaved={() => { view = 'reader'; Sync() }} onappearance={appearance} />
+      <Settings onsaved={() => { view = 'reader'; Sync() }} {look} onlook={setLook} />
     {:else if view === 'highlights'}
       <Highlights onopen={(id) => open({ id, read: true })} />
     {:else if issue}

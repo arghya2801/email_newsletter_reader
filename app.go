@@ -67,7 +67,7 @@ func (a *App) SetAppearance(density string, scale int) error {
 	if density != "compact" {
 		density = "comfortable"
 	}
-	scale = min(max(scale, 80), 130)
+	scale = min(max(scale, 80), 150)
 	a.mu.Lock()
 	a.cfg.Density, a.cfg.Scale = density, scale
 	c := a.cfg

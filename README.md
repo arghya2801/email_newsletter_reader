@@ -31,9 +31,10 @@ The first sync pulls the full history of those labels. After that it only fetche
 | `e` | Done (hides it; Undo in the toast) |
 | `r` | Sync now |
 | `g h` / `g i` / `g s` | Highlights / issues / settings |
+| `Ctrl+Shift+Plus` / `Minus` / `0` | Zoom the whole app in / out / reset |
 | `Esc` | Close note, leave a text field |
 
-Settings → Appearance switches between Comfortable and Compact density (narrower panes, tighter rows) and three text sizes; changes apply immediately.
+Settings → Appearance switches between Comfortable and Compact density (narrower panes, tighter rows) and sets the app zoom from 80% to 150%; changes apply immediately.
 
 Click a highlight to add a note or remove it. The Highlights page exports everything to `highlights.md` in your save folder, grouped by issue, or copies it to the clipboard.
 

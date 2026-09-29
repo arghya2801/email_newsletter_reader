@@ -1,9 +1,14 @@
+<script module>
+  export const zooms = [80, 90, 100, 110, 120, 130, 150]
+</script>
+
 <script>
   import { onMount } from 'svelte'
-  import { GetConfig, SaveConfig, ServerLabels, ChooseSaveDir, SetAppearance } from '../wailsjs/go/main/App'
+  import { GetConfig, SaveConfig, ServerLabels, ChooseSaveDir } from '../wailsjs/go/main/App'
   import { BrowserOpenURL } from '../wailsjs/runtime/runtime'
 
-  let { onsaved, onappearance } = $props()
+  // look is the live appearance, owned by App so keyboard zoom and this page agree.
+  let { onsaved, look, onlook } = $props()
   let cfg = $state(null)
   let serverLabels = $state([])
   let filter = $state('')
@@ -42,19 +47,9 @@
     if (d) cfg.saveDir = d
   }
 
-  const sizes = [[90, 'Small'], [100, 'Default'], [110, 'Large']]
-
-  // Appearance saves on its own, right away, without touching unsaved account fields.
-  function look(density, scale) {
-    cfg.density = density
-    cfg.scale = scale
-    onappearance(density, scale)
-    SetAppearance(density, scale)
-  }
-
   async function save(e) {
     e.preventDefault()
-    await SaveConfig({ ...cfg, syncMinutes: +cfg.syncMinutes || 15 })
+    await SaveConfig({ ...cfg, ...look, syncMinutes: +cfg.syncMinutes || 15 })
     onsaved()
   }
 </script>
@@ -68,17 +63,17 @@
         <span class="muted">Density</span>
         <div class="seg" role="radiogroup" aria-label="Density">
           {#each [['comfortable', 'Comfortable'], ['compact', 'Compact']] as [v, label]}
-            <label><input type="radio" name="density" value={v} checked={(cfg.density || 'comfortable') === v} onchange={() => look(v, cfg.scale || 100)} /> {label}</label>
+            <label><input type="radio" name="density" value={v} checked={look.density === v} onchange={() => onlook(v, look.scale)} /> {label}</label>
           {/each}
         </div>
-        <span class="muted">Text size</span>
-        <div class="seg" role="radiogroup" aria-label="Text size">
-          {#each sizes as [v, label]}
-            <label><input type="radio" name="scale" value={v} checked={(cfg.scale || 100) === v} onchange={() => look(cfg.density || 'comfortable', v)} /> {label}</label>
+        <span class="muted">Zoom</span>
+        <div class="seg" role="radiogroup" aria-label="Zoom">
+          {#each zooms as v}
+            <label><input type="radio" name="scale" value={v} checked={look.scale === v} onchange={() => onlook(look.density, v)} /> {v}%</label>
           {/each}
         </div>
       </div>
-      <span class="hint muted">Compact fits more issues on screen: narrower panes, tighter rows, reading time on the date line. Changes apply immediately.</span>
+      <span class="hint muted">Compact fits more issues on screen: narrower panes, tighter rows, reading time on the date line. Zoom scales the whole app; Ctrl+Shift+Plus / Minus / 0 work anywhere. Changes apply immediately.</span>
     </fieldset>
 
     {#if !cfg.password}
