@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS highlights(
   id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL REFERENCES messages(id),
   text TEXT NOT NULL, prefix TEXT NOT NULL, suffix TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(subject, from_name, text, content='');
+CREATE TABLE IF NOT EXISTS pending_seen(message_id INTEGER PRIMARY KEY REFERENCES messages(id));
 `
 
 type Store struct{ db *sql.DB }
@@ -362,6 +363,12 @@ func (s *Store) Get(id int64) (Msg, error) {
 
 func (s *Store) SetRead(id int64, read bool) error {
 	_, err := s.db.Exec(`UPDATE messages SET read=? WHERE id=?`, read, id)
+	return err
+}
+
+// queueSeen records an issue opened in the app, to be marked read in Gmail by pushSeen.
+func (s *Store) queueSeen(id int64) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO pending_seen VALUES(?)`, id)
 	return err
 }
 

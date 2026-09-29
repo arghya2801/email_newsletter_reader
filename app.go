@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,6 +19,7 @@ type App struct {
 	mu      sync.Mutex // guards cfg
 	cfg     Config
 	syncing sync.Mutex
+	pushing sync.Mutex // one pushSeen at a time
 }
 
 func NewApp(dir string, portable bool, store *Store) *App {
@@ -128,6 +130,26 @@ func (a *App) Sync() {
 		}
 	}
 	emit(SyncStatus{Count: fetched})
+	a.pushSeen() // retry anything that failed to reach Gmail earlier
+}
+
+// pushSeen sends queued "opened in the app" marks to Gmail. Failures stay queued.
+func (a *App) pushSeen() {
+	a.pushing.Lock()
+	defer a.pushing.Unlock()
+	var n int
+	if a.store.db.QueryRow(`SELECT count(*) FROM pending_seen`).Scan(&n); n == 0 {
+		return
+	}
+	cl, err := dial(a.config())
+	if err != nil {
+		log.Printf("mark read in Gmail: %v", err)
+		return
+	}
+	defer cl.Logout()
+	if err := a.store.pushSeen(cl); err != nil {
+		log.Printf("mark read in Gmail: %v", err)
+	}
 }
 
 func (a *App) Labels() ([]Count, error)              { return a.store.Labels() }
@@ -141,14 +163,19 @@ type Issue struct {
 	Highlights []Highlight `json:"highlights"`
 }
 
-// Open returns an issue ready to render and marks it read (locally only).
+// Open returns an issue ready to render and marks it read, here and in Gmail.
 func (a *App) Open(id int64) (Issue, error) {
 	m, err := a.store.Get(id)
 	if err != nil {
 		return Issue{}, err
 	}
 	m.HTML = rewrite(m.HTML, proxied)
-	a.store.SetRead(id, true)
+	if !m.Read {
+		a.store.SetRead(id, true)
+		if a.store.queueSeen(id) == nil {
+			go a.pushSeen()
+		}
+	}
 	hs, err := a.store.Highlights(id)
 	return Issue{m, hs}, err
 }

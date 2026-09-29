@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -106,9 +107,9 @@ func TestFetchImageCaches(t *testing.T) {
 	}
 }
 
-// TestSync runs the real sync against go-imap's in-memory server: batching,
-// resume from last UID, dedupe across labels, and that the mailbox is untouched.
-func TestSync(t *testing.T) {
+// memIMAP starts go-imap's in-memory server with labels News and Fin and
+// returns a logged-in client plus a helper that files fixture copy i under box.
+func memIMAP(t *testing.T) (*imapclient.Client, func(box string, i int)) {
 	mem := imapmemserver.New()
 	u := imapmemserver.NewUser("me", "pw")
 	mem.AddUser(u)
@@ -123,13 +124,13 @@ func TestSync(t *testing.T) {
 	})
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	go srv.Serve(ln)
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	cl, err := imapclient.DialInsecure(ln.Addr().String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Close()
+	t.Cleanup(func() { cl.Close() })
 	cl.Login("me", "pw").Wait()
 	add := func(box string, i int) {
 		raw := []byte(strings.Replace(fixture, "<abc@mb>", fmt.Sprintf("<m%d@x>", i), 1))
@@ -140,6 +141,13 @@ func TestSync(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	return cl, add
+}
+
+// TestSync runs the real sync against go-imap's in-memory server: batching,
+// resume from last UID, dedupe across labels, and that the mailbox is untouched.
+func TestSync(t *testing.T) {
+	cl, add := memIMAP(t)
 	for i := 0; i < 120; i++ {
 		add("News", i)
 	}
@@ -170,6 +178,83 @@ func TestSync(t *testing.T) {
 	msgs, _ := cl.Fetch(imap.SeqSetNum(1), &imap.FetchOptions{Flags: true}).Collect()
 	if len(msgs[0].Flags) != 0 {
 		t.Errorf("sync changed server flags: %v", msgs[0].Flags)
+	}
+}
+
+// TestPushSeen: issues opened in the app, and only those, get \Seen on the
+// server; ids without a Message-ID are dropped; the queue empties.
+func TestPushSeen(t *testing.T) {
+	cl, add := memIMAP(t)
+	for i := 0; i < 3; i++ {
+		add("News", i)
+	}
+	add("Fin", 1) // Gmail shows one message under two labels; the fake server has two copies
+	s, _ := openStore(filepath.Join(t.TempDir(), "t.db"))
+	defer s.db.Close()
+	s.syncLabel(cl, "News", func(int) {})
+	s.syncLabel(cl, "Fin", func(int) {})
+	tx, _ := s.db.Begin()
+	insertMsg(tx, &Msg{MessageID: "nomsgid-1", Subject: "x"}, "News")
+	tx.Commit()
+
+	id := func(mid string) (n int64) {
+		s.db.QueryRow(`SELECT id FROM messages WHERE message_id=?`, mid).Scan(&n)
+		return
+	}
+	s.queueSeen(id("m1@x")) // pushed via Fin, the first of its labels
+	s.queueSeen(id("m2@x"))
+	s.queueSeen(id("m2@x")) // opened twice
+	s.queueSeen(id("nomsgid-1"))
+	if err := s.pushSeen(cl); err != nil {
+		t.Fatal(err)
+	}
+	seen := func(box string) (out []bool) {
+		cl.Select(box, &imap.SelectOptions{ReadOnly: true}).Wait()
+		msgs, _ := cl.Fetch(imap.SeqSet{{Start: 1, Stop: 0}}, &imap.FetchOptions{Flags: true}).Collect()
+		for _, m := range msgs {
+			out = append(out, slices.Contains(m.Flags, imap.FlagSeen))
+		}
+		return
+	}
+	if got := fmt.Sprint(seen("News"), seen("Fin")); got != "[false false true] [true]" {
+		t.Errorf("seen flags News, Fin: %s", got)
+	}
+	var left int
+	s.db.QueryRow(`SELECT count(*) FROM pending_seen`).Scan(&left)
+	if left != 0 {
+		t.Errorf("%d left in queue", left)
+	}
+	if err := s.pushSeen(cl); err != nil { // empty queue is a no-op
+		t.Fatal(err)
+	}
+}
+
+// TestOpenQueuesSeen: opening an unread issue queues it for Gmail; opening a
+// read one doesn't; a failed push (no account here) leaves it queued.
+func TestOpenQueuesSeen(t *testing.T) {
+	s, _ := openStore(filepath.Join(t.TempDir(), "t.db"))
+	defer s.db.Close()
+	tx, _ := s.db.Begin()
+	insertMsg(tx, &Msg{MessageID: "a@x", Subject: "unread"}, "News")
+	insertMsg(tx, &Msg{MessageID: "b@x", Subject: "read", Read: true}, "News")
+	tx.Commit()
+	a := &App{store: s}
+	for _, id := range []int64{1, 2, 1} {
+		if _, err := a.Open(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.pushSeen() // what the background push does: fails to dial, keeps the row
+	var ids []int64
+	rows, _ := s.db.Query(`SELECT message_id FROM pending_seen`)
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if m, _ := s.Get(1); fmt.Sprint(ids) != "[1]" || !m.Read {
+		t.Errorf("queued %v, read %v", ids, m.Read)
 	}
 }
 
